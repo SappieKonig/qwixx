@@ -1,9 +1,11 @@
-from random import randint, choice
-from enum import Enum
 from copy import deepcopy
 from dataclasses import dataclass
+from enum import Enum
+from random import randint
 
-from player import Player
+from tqdm import tqdm
+
+from .player import Player
 
 
 class Color(Enum):
@@ -21,6 +23,7 @@ class Action:
 
 def dice_throw() -> int:
     return randint(1, 6)
+
 
 class Scoreboard:
     def __init__(self):
@@ -144,65 +147,29 @@ class Qwixx:
                 for action in actions:
                     scoreboard.move(action)
 
-
         self.turn += 1
         self.turn %= len(self.players)
         self.update_crossed()
 
 
-
-
-if __name__ == '__main__':
-    class RandomPlayer(Player):
-        def move(self, actions, is_main, scoreboard, scoreboards):
-            if len(actions) == 0:
-                return []
-            return choice(actions)
-
-    class ImprovedPlayer(Player):
-        def cost(self, scoreboard, actions):
-            scoreboard = deepcopy(scoreboard)
-            c = 0
-            for action in actions:
-                if len(scoreboard[action.color]) != 0:
-                    c += abs(scoreboard[action.color][-1] - action.n)
-                else:
-                    if action.color in [Color.RED, Color.YELLOW]:
-                        c += abs(action.n - 1)
-                    else:
-                        c += abs(action.n - 13)
-            return c / len(actions)
-
-        def move(self, actions, is_main, scoreboard, scoreboards):
-            if len(actions) == 0:
-                return []
-            best_action = []
-            if not is_main:
-                cost = 2
-                for action in actions:
-                    new_c = self.cost(scoreboard, action)
-                    if new_c < cost:
-                        cost = new_c
-                        best_action = action
-
-            else:
-                cost = 4
-                for action in actions:
-                    new_c = self.cost(scoreboard, action)
-                    if new_c < cost:
-                        cost = new_c
-                        best_action = action
-            return best_action
-
+def compete(agent1, agent2, n_games: int = 1000):
     wins = draws = losses = 0
-    for _ in range(100):
-        game = Qwixx([ImprovedPlayer(), RandomPlayer()])
-        result = game.play()
-        if result[0] > result[1]:
-            wins += 1
-        elif result[0] == result[1]:
-            draws += 1
+    for i in tqdm(range(n_games), desc='Actively competing!'):
+        if i % 2 == 0:
+            score = Qwixx([agent1, agent2]).play()
+            if score[0] > score[1]:
+                wins += 1
+            elif score[1] > score[0]:
+                losses += 1
+            else:
+                draws += 1
         else:
-            losses += 1
-    print(wins, draws, losses)
+            score = Qwixx([agent2, agent1]).play()
+            if score[1] > score[0]:
+                wins += 1
+            elif score[0] > score[1]:
+                losses += 1
+            else:
+                draws += 1
 
+    return wins, draws, losses
