@@ -54,7 +54,7 @@ class Scoreboard:
         if action.color == Color.GREEN:
             return action.n < min(self.green, default=13)
         if action.color == Color.BLUE:
-            return action.n < min(self.green, default=13)
+            return action.n < min(self.blue, default=13)
         return False
 
     def move(self, action: Action):
@@ -68,6 +68,7 @@ class Qwixx:
         self.players = players
         self.crossed: set[Color] = set()
         self.turn = 0
+        self.round = 0
 
     def play(self) -> list[int]:
         while not self.is_finished():
@@ -155,6 +156,7 @@ class Qwixx:
         # Advance the turn only if it's the main player's move
         if player_index == self.turn:
             self.turn = (self.turn + 1) % self.n_players
+            self.round += 1
 
 
     def move(self):
