@@ -19,15 +19,16 @@ if __name__ == '__main__':
     pop_size = 100
     mutation_rate = 0.01
     crossover_rate = 0.7
-    generations = 100
+    generations = 300
     games_per_individual = 10
 
-    ga = GeneticAlgorithm(population_size=pop_size, mutation_rate=mutation_rate, crossover_rate=crossover_rate)
-    best_agent = ga.evolve(generations=generations, games_per_individual=games_per_individual)
+    # ga = GeneticAlgorithm(population_size=pop_size, mutation_rate=mutation_rate, crossover_rate=crossover_rate)
+    # best_agent = ga.evolve(generations=generations, games_per_individual=games_per_individual)
 
-    best_agent = GA_Player('saved_agents/GA50_0.01_0.7_100_10.pkl')
+    best_agent = GA_Player('antics/saved_agents/GA100_0.01_0.7_100_10.pkl')
+    best_agent2 = GA_Player('antics/saved_agents/GA100_0.01_0.7_1000_10.pkl')
     # Compete against RandomPlayer
-    wins, draws, losses = compete(best_agent, RandomPlayer(), n_games=1000)
+    wins, draws, losses = compete(RandomPlayer(),best_agent2, n_games=1000)
     print(f"Best agent vs RandomPlayer: Wins: {wins}, Draws: {draws}, Losses: {losses}")
 
 

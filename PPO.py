@@ -9,7 +9,7 @@ from init_player import RandomPlayer
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
+from GA import GeneticAlgorithmAgent, GeneticAlgorithm, GA_Player
 
 class GeneticPPOAgent(Player):
     def __init__(self, state_size, action_size, learning_rate=0.001, epsilon=0.2):
@@ -127,7 +127,7 @@ class GeneticPPOAgent(Player):
 
 
 class GeneticPPOAlgorithm:
-    def __init__(self, population_size=50, mutation_rate=0.01, crossover_rate=0.7):
+    def __init__(self, population_size=50, mutation_rate=0.1, crossover_rate=0.7):
         self.population_size = population_size
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
@@ -164,15 +164,60 @@ class GeneticPPOAlgorithm:
         fitnesses = []
         all_experiences = []
         for individual in self.population:
-            wins, draws, losses = compete(individual, RandomPlayer(), games_per_individual)
+            wins, draws, losses = compete(individual, GA_Player(pickle_file="antics/saved_agents/GA100_0.01_0.7_100_10.pkl"), games_per_individual)
             fitnesses.append(wins + 0.5 * draws)
             all_experiences.append(self.collect_experiences(individual, games_per_individual))
         return fitnesses, all_experiences
+    
+    def calculate_game_progress(self, game):
+        total_numbers_per_color = 11  # Numbers from 2 to 12
+        total_possible_numbers = total_numbers_per_color * len(Color)
+        agent_scoreboard = game.scoreboards[0]
+        numbers_crossed = sum(len(agent_scoreboard[color]) for color in Color)
+        progress = numbers_crossed / total_possible_numbers
+        return progress
+
+    def feature_number_between(self, game):
+        reward = 0
+        if len(game.scoreboards[0].red) > 1:
+            reward -= game.scoreboards[0].red[-1] - game.scoreboards[0].red[-2]
+        if len(game.scoreboards[0].blue) > 1:
+            reward -= game.scoreboards[0].blue[-1] - game.scoreboards[0].blue[-2]    
+        if len(game.scoreboards[0].green) > 1:
+            reward -= game.scoreboards[0].green[-1] - game.scoreboards[0].green[-2]
+        if len(game.scoreboards[0].yellow) > 1:
+            reward -= game.scoreboards[0].yellow[-1] - game.scoreboards[0].yellow[-2]
+
+        return reward
+    
+    def feature_first_choices(self, game):
+        reward = 0
+        if len(game.scoreboards[0].red) < 2:
+            reward -=np.sum(game.scoreboards[0].red)
+        if len(game.scoreboards[0].yellow) <2:
+            reward -=np.sum(game.scoreboards[0].yellow)
+
+        if len(game.scoreboards[0].green) < 2:
+            reward +=np.sum(game.scoreboards[0].green)
+        if len(game.scoreboards[0].blue) <2:
+            reward +=np.sum(game.scoreboards[0].blue)
+        return reward
+    def decrease_mutations(self, game):
+        if self.mutation_rate < 0.01:
+            self.mutation_rate = 0.01
+        else:
+            self.mutation_rate = self.mutation_rate* np.exp(-0.1*game.round)
+        
+    # def feature_kill_colour(self, game):
+    #     reward = 0
+    #     if game.scoreboards[0].score>game.scoreboards[1].score:
+
+            
 
     def collect_experiences(self, agent, num_games):
         experiences = []
         for _ in range(num_games):
-            game = Qwixx([agent, RandomPlayer()])
+            game = Qwixx([agent, GA_Player(pickle_file="antics/saved_agents/GA100_0.01_0.7_100_10.pkl")])
             game_experiences = []
             initial_score = game.scoreboards[0].score
             while not game.is_finished():
@@ -193,17 +238,23 @@ class GeneticPPOAlgorithm:
                 # Validate chosen action
                 if chosen_action not in possible_actions:
                     chosen_action = []
-
+            
                 # Apply the chosen action
                 game.apply_action(player_index, chosen_action)
 
+                # Compute reward
+                progress = self.calculate_game_progress(game)
+                
+                
+                colour_reward = self.feature_first_choices(game)
+                feature_first = self.feature_first_choices(game)
                 new_score = game.scoreboards[0].score
-                reward = new_score - old_score
+                reward = new_score - old_score+colour_reward+feature_first
 
                 # Get the next state and done flag
                 next_state = agent.get_state_vector(game.scoreboards[0], game.turn == 0)
                 done = game.is_finished()
-
+                self.decrease_mutations(game)
                 # Store experience
                 game_experiences.append((state, chosen_action, reward, next_state, done, possible_actions))
 
@@ -295,9 +346,9 @@ class GeneticPPOAlgorithm:
 if __name__ == '__main__':
 
     pop_size = 50
-    mutation_rate = 0.01
+    mutation_rate = 0.1
     crossover_rate = 0.7
-    generations = 1
+    generations = 30
     games_per_individual = 10
 
     algorithm = GeneticPPOAlgorithm(

@@ -54,7 +54,6 @@ class ImprovedPlayer(Player):
         return best_action
 
 
-
 class RandomPlayer(Player):
     def move(self, actions, is_main, scoreboard, scoreboards):
         return random.choice(actions)
