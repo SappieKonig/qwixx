@@ -121,8 +121,10 @@ class Qwixx:
             for action_2 in actions_phase_2:
                 main_actions.append([action_1, action_2])
             main_actions.append([action_1])
+        main_actions.append([])
 
         side_actions = [[action] for action in actions_phase_1]
+        side_actions.append([])
 
         sb_copy = deepcopy(self.scoreboards)
         for i, (player, scoreboard) in enumerate(zip(self.players, self.scoreboards)):

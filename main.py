@@ -7,8 +7,6 @@ from qwixx.player import Player
 
 class RandomPlayer(Player):
     def move(self, actions, is_main, scoreboard, scoreboards):
-        if len(actions) == 0:
-            return []
         return choice(actions)
 
 
@@ -20,6 +18,9 @@ class ImprovedPlayer(Player):
         """
         Measures the cost of a set of actions. Formally, it's the number of squares left empty by playing a move
         """
+        # arbitrarily decide that the cost for taking no action is 10
+        if len(actions) == 0:
+            return 10
         scoreboard = deepcopy(scoreboard)
         c = 0
         for action in actions:
@@ -33,8 +34,6 @@ class ImprovedPlayer(Player):
         return c / len(actions)
 
     def move(self, actions, is_main, scoreboard, scoreboards):
-        if len(actions) == 0:
-            return []
         best_action = []
         cost = float('inf')
         if not is_main:
