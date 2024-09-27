@@ -1,56 +1,43 @@
 from copy import deepcopy
 from random import choice
+import numpy as np
+import random
+import pickle
 
 from qwixx.game import Color, compete
 from qwixx.player import Player
+from GA import GeneticAlgorithmAgent, GeneticAlgorithm, GA_Player
+
+from init_player import RandomPlayer
 
 
-class RandomPlayer(Player):
-    def move(self, actions, is_main, scoreboard, scoreboards):
-        return choice(actions)
 
-
-class ImprovedPlayer(Player):
-    """
-    An improved agent that no longer picks a random move, but who picks a move that leaves the fewest open squares
-    """
-    def cost(self, scoreboard, actions):
-        """
-        Measures the cost of a set of actions. Formally, it's the number of squares left empty by playing a move
-        """
-        # arbitrarily decide that the cost for taking no action is 10
-        if len(actions) == 0:
-            return 10
-        scoreboard = deepcopy(scoreboard)
-        c = 0
-        for action in actions:
-            if len(scoreboard[action.color]) != 0:
-                c += abs(scoreboard[action.color][-1] - action.n) - 1
-            else:
-                if action.color in [Color.RED, Color.YELLOW]:
-                    c += abs(action.n - 1) - 1
-                else:
-                    c += abs(action.n - 13) - 1
-        return c / len(actions)
-
-    def move(self, actions, is_main, scoreboard, scoreboards):
-        best_action = []
-        cost = float('inf')
-        if not is_main:
-            for action in actions:
-                new_c = self.cost(scoreboard, action)
-                if new_c < cost:
-                    cost = new_c
-                    best_action = action
-
-        else:
-            for action in actions:
-                new_c = self.cost(scoreboard, action)
-                if new_c < cost:
-                    cost = new_c
-                    best_action = action
-        return best_action
-
-
+# Usage
 if __name__ == '__main__':
-    print(compete(ImprovedPlayer(), RandomPlayer()))
+
+
+    pop_size = 100
+    mutation_rate = 0.01
+    crossover_rate = 0.7
+    generations = 300
+    games_per_individual = 10
+
+    # ga = GeneticAlgorithm(population_size=pop_size, mutation_rate=mutation_rate, crossover_rate=crossover_rate)
+    # best_agent = ga.evolve(generations=generations, games_per_individual=games_per_individual)
+
+    best_agent = GA_Player('antics/saved_agents/GA100_0.01_0.7_100_10.pkl')
+    best_agent2 = GA_Player('antics/saved_agents/GA100_0.01_0.7_1000_10.pkl')
+    # Compete against RandomPlayer
+    wins, draws, losses = compete(RandomPlayer(),best_agent2, n_games=1000)
+    print(f"Best agent vs RandomPlayer: Wins: {wins}, Draws: {draws}, Losses: {losses}")
+
+
+    file_name = f'saved_agents/GA{pop_size}_{mutation_rate}_{crossover_rate}_{generations}_{games_per_individual}.pkl'
+    # Save the best agent's genome to a file
+    with open(file_name, 'wb') as f:
+        pickle.dump(best_agent.genome, f)
+
+    print(f"Best agent saved!{file_name}")
+
+
+    
