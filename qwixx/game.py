@@ -54,7 +54,7 @@ class Scoreboard:
         if action.color == Color.GREEN:
             return action.n < min(self.green, default=13)
         if action.color == Color.BLUE:
-            return action.n < min(self.green, default=13)
+            return action.n < min(self.blue, default=13)
         return False
 
     def move(self, action: Action):

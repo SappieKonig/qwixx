@@ -53,4 +53,16 @@ class ImprovedPlayer(Player):
 
 
 if __name__ == '__main__':
-    print(compete(ImprovedPlayer(), RandomPlayer()))
+    import torch
+    from kenzo_martin import MLPPlayer
+    from train_genetic import GeneticPlayer, Network
+    from GA import GA_Player
+    FM_Player = GA_Player('/home/epochvpc4/Downloads/GA100_0.01_0.7_1000_10.pkl')
+    Iggy_Player = GeneticPlayer(torch.load('genetic8.pt')['model'])
+    Iggy_Player.temperature = 0
+    KM_Player = MLPPlayer('/home/epochvpc4/Downloads/goatmodel.pt')
+    compete(FM_Player, FM_Player, n_games=1)
+    compete(KM_Player, KM_Player, n_games=1)
+    compete(Iggy_Player, Iggy_Player, n_games=1)
+
+    print(compete(KM_Player, Iggy_Player, n_games=1000))
