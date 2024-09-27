@@ -9,6 +9,7 @@ from qwixx.player import Player
 from GA import GeneticAlgorithmAgent, GeneticAlgorithm, GA_Player
 
 from init_player import RandomPlayer
+from PPO import PPOplayer
 
 
 
@@ -25,10 +26,11 @@ if __name__ == '__main__':
     # ga = GeneticAlgorithm(population_size=pop_size, mutation_rate=mutation_rate, crossover_rate=crossover_rate)
     # best_agent = ga.evolve(generations=generations, games_per_individual=games_per_individual)
 
-    best_agent = GA_Player('antics/saved_agents/GA100_0.01_0.7_100_10.pkl')
+    best_ppo = PPOplayer(state_size=47, action_size=10 ,pickle_file="antics/saved_agents/GA_PPO_50_0.01_0.7_100_10.pkl")
+    best_agent = GA_Player('saved_agents/GA100_0.01_0.7_300_10.pkl')
     best_agent2 = GA_Player('antics/saved_agents/GA100_0.01_0.7_1000_10.pkl')
     # Compete against RandomPlayer
-    wins, draws, losses = compete(RandomPlayer(),best_agent2, n_games=1000)
+    wins, draws, losses = compete(best_agent,best_ppo, n_games=1000)
     print(f"Best agent vs RandomPlayer: Wins: {wins}, Draws: {draws}, Losses: {losses}")
 
 

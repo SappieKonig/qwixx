@@ -11,6 +11,125 @@ import torch.nn as nn
 import torch.optim as optim
 from GA import GeneticAlgorithmAgent, GeneticAlgorithm, GA_Player
 
+class PPOplayer:
+    def __init__(self, state_size, action_size, learning_rate=0.001, epsilon=0.2, pickle_file=None):
+        self.state_size = state_size
+        self.action_size = action_size
+        self.epsilon = epsilon
+
+        # Define networks
+        self.policy_net = nn.Sequential(
+            nn.Linear(state_size, 128),
+            nn.ReLU(),
+            nn.Linear(128, action_size)
+        )
+
+        self.value_net = nn.Sequential(
+            nn.Linear(state_size, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1)
+        )
+
+        self.optimizer = optim.Adam(list(self.policy_net.parameters()) + list(self.value_net.parameters()), lr=learning_rate)
+
+        if pickle_file:
+            self.load_model(pickle_file)
+
+    def load_model(self, pickle_file):
+        with open(pickle_file, 'rb') as f:
+            saved_data = pickle.load(f)
+        
+        # Load policy network
+        policy_state_dict = saved_data["policy_net"]
+        if policy_state_dict['2.weight'].shape[0] != self.action_size:
+            # Adjust the last layer if sizes don't match
+            policy_state_dict['2.weight'] = torch.rand(self.action_size, 128)
+            policy_state_dict['2.bias'] = torch.rand(self.action_size)
+        self.policy_net.load_state_dict(policy_state_dict)
+
+        # Load value network
+        self.value_net.load_state_dict(saved_data["value_net"])
+
+    def move(self, actions, is_main, scoreboard, scoreboards):
+        state = self.get_state_vector(scoreboard, is_main)
+        state_tensor = torch.FloatTensor(state)
+        
+        with torch.no_grad():
+            action_logits = self.policy_net(state_tensor)
+            action_probs = torch.softmax(action_logits, dim=0)
+        
+        # Convert actions to indices
+        action_indices = list(range(len(actions)))
+        
+        # Select action using the probability distribution
+        chosen_index = np.random.choice(action_indices, p=action_probs.numpy())
+        return actions[chosen_index]
+
+    def get_state_vector(self, scoreboard, is_main):
+        state = []
+        for color in Color:
+            track = scoreboard[color]
+            if color in [Color.RED, Color.YELLOW]:
+                state.extend([1 if i in track else 0 for i in range(2, 13)])
+            else:
+                state.extend([1 if i in track else 0 for i in range(12, 1, -1)])
+        state.extend([scoreboard.crosses, scoreboard.score, int(is_main)])
+        return np.array(state)
+
+    def update(self, states, actions, old_log_probs, returns, advantages):
+        states = torch.FloatTensor(states)
+        old_log_probs = torch.FloatTensor(old_log_probs)
+        returns = torch.FloatTensor(returns)
+        advantages = torch.FloatTensor(advantages)
+
+        # Convert actions to one-hot encoding
+        action_indices = [self.action_to_index(action) for action in actions]
+        actions = torch.LongTensor(action_indices)
+
+        for _ in range(5):  # PPO update iterations
+            # Get current action probabilities and values
+            logits = self.policy_net(states)
+            values = self.value_net(states).squeeze()
+            
+            new_probs = torch.softmax(logits, dim=1)
+            new_log_probs = torch.log(new_probs.gather(1, actions.unsqueeze(1))).squeeze()
+            
+            # Compute ratio and surrogate loss
+            ratio = torch.exp(new_log_probs - old_log_probs)
+            surr1 = ratio * advantages
+            surr2 = torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * advantages
+            policy_loss = -torch.min(surr1, surr2).mean()
+            
+            # Compute value loss
+            value_loss = nn.MSELoss()(values, returns)
+            
+            # Total loss
+            loss = policy_loss + 0.5 * value_loss
+            
+            # Optimize
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+
+    def action_to_index(self, action):
+        # Convert action to index (you need to implement this based on your action space)
+        # This is a placeholder implementation
+        return 0 if not action else 1
+
+    def get_action_probabilities(self, state):
+        state_tensor = torch.FloatTensor(state)
+        with torch.no_grad():
+            logits = self.policy_net(state_tensor)
+            probs = torch.softmax(logits, dim=0)
+        return probs.numpy()
+
+    def get_value(self, state):
+        state_tensor = torch.FloatTensor(state)
+        with torch.no_grad():
+            value = self.value_net(state_tensor)
+        return value.item()
+        
+
 class GeneticPPOAgent(Player):
     def __init__(self, state_size, action_size, learning_rate=0.001, epsilon=0.2):
         super().__init__()  # Initialize the base Player class
@@ -341,6 +460,120 @@ class GeneticPPOAlgorithm:
         for param in individual.value_net.parameters():
             mutation_mask = torch.rand(param.data.size()) < self.mutation_rate
             param.data += mutation_mask.float() * torch.randn(param.data.size()) * 0.1
+
+class GeneticPPOAgent_load(Player):
+    def __init__(self, state_size, action_size, learning_rate=0.001, epsilon=0.2):
+        super().__init__()  # Initialize the base Player class
+        self.state_size = state_size
+        self.action_size = action_size
+        # Define the policy network with input size equal to state_size + action_size
+        self.policy_net = nn.Sequential(
+            nn.Linear(state_size + action_size, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1)
+        )
+        self.old_policy_net = deepcopy(self.policy_net)
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=learning_rate)
+        # Define the value network with input size equal to state_size
+        self.value_net = nn.Sequential(
+            nn.Linear(state_size, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1)
+        )
+        self.value_optimizer = optim.Adam(self.value_net.parameters(), lr=learning_rate)
+        self.epsilon = epsilon
+
+    def move(self, actions, is_main, scoreboard, other_scoreboards):
+        # Since 'game_progress' is not passed, we remove it from the arguments
+        state = self.get_state_vector(scoreboard, is_main)
+        action_probabilities = self.get_action_probabilities(state, actions)
+        chosen_action_index = np.random.choice(len(actions), p=action_probabilities)
+        return actions[chosen_action_index]
+
+    def get_state_vector(self, scoreboard, is_main):
+        state = []
+        for color in Color:
+            track = scoreboard[color]
+            # For RED and YELLOW, positions from 2 to 12
+            # For GREEN and BLUE, positions from 12 down to 2
+            if color in [Color.RED, Color.YELLOW]:
+                state.extend([1 if i in track else 0 for i in range(2, 13)])
+            else:
+                state.extend([1 if i in track else 0 for i in range(12, 1, -1)])
+        state.extend([scoreboard.crosses, scoreboard.score, int(is_main)])
+        return np.array(state)
+
+    def get_action_probabilities(self, state, actions):
+        action_vectors = [self.get_action_vector(action) for action in actions]
+        input_vectors = [np.concatenate([state, action_vector]) for action_vector in action_vectors]
+        inputs = torch.tensor(input_vectors, dtype=torch.float32)
+        logits = self.policy_net(inputs).squeeze(-1)
+        probs = torch.softmax(logits, dim=0).detach().numpy()
+        return probs
+
+    def get_action_vector(self, action):
+        vector = np.zeros(self.action_size)
+        if not action:  # Empty action
+            return vector
+        # First action
+        first_action = action[0]
+        vector[0:4] = self.one_hot_encode_color(first_action.color)
+        vector[4] = (first_action.n - 2) / 10  # Normalize number between 0 and 1
+        if len(action) > 1:
+            # Second action
+            second_action = action[1]
+            vector[5:9] = self.one_hot_encode_color(second_action.color)
+            vector[9] = (second_action.n - 2) / 10  # Normalize
+        return vector
+
+    def one_hot_encode_color(self, color):
+        color_index = list(Color).index(color)
+        one_hot = np.zeros(4)
+        one_hot[color_index] = 1
+        return one_hot
+
+    def update(self, states, actions, actions_lists, advantages, returns):
+        for _ in range(5):  # Multiple optimization steps
+            for state, action, actions_list, advantage, return_ in zip(states, actions, actions_lists, advantages, returns):
+                state_tensor = torch.tensor(state, dtype=torch.float32)
+                action_vector = torch.tensor(self.get_action_vector(action), dtype=torch.float32)
+                input_vector = torch.cat([state_tensor, action_vector])
+
+                # Compute probabilities
+                old_prob = self.get_action_probability(state, action, actions_list, use_old=True)
+                new_prob = self.get_action_probability(state, action, actions_list)
+                ratio = torch.tensor(new_prob / (old_prob + 1e-8))
+                clipped_ratio = torch.clamp(ratio, torch.tensor(1 - self.epsilon),torch.tensor(1 + self.epsilon))
+                policy_loss = -torch.min(ratio * advantage, clipped_ratio * advantage)
+
+                # Compute value loss
+                value = self.value_net(state_tensor)
+                value_loss = 0.5 * (return_ - value).pow(2)
+
+                # Total loss
+                total_loss = policy_loss + value_loss
+
+                # Backpropagation
+                self.optimizer.zero_grad()
+                self.value_optimizer.zero_grad()
+                total_loss.backward()
+                self.optimizer.step()
+                self.value_optimizer.step()
+
+        self.old_policy_net.load_state_dict(self.policy_net.state_dict())
+
+    def get_action_probability(self, state, action, actions_list, use_old=False):
+        policy_net = self.old_policy_net if use_old else self.policy_net
+        action_vectors = [self.get_action_vector(a) for a in actions_list]
+        input_vectors = [np.concatenate([state, av]) for av in action_vectors]
+        inputs = torch.tensor(input_vectors, dtype=torch.float32)
+        logits = policy_net(inputs).squeeze(-1)
+        probs = torch.softmax(logits, dim=0).detach().numpy()
+        try:
+            action_index = actions_list.index(action)
+        except ValueError:
+            return 1e-8
+        return probs[action_index]
 
 
 if __name__ == '__main__':
