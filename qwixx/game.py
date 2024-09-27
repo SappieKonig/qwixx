@@ -103,6 +103,60 @@ class Qwixx:
                     scoreboard.crossed[color] = True
                     self.crossed.add(color)
 
+
+    def get_possible_actions(self, is_main, player_index):
+        colorless_throws = [dice_throw(), dice_throw()]
+        colored_throws = {color: dice_throw() for color in Color}
+
+        actions_phase_1 = [Action(color, sum(colorless_throws)) for color in Color if color not in self.crossed]
+
+        actions_phase_2 = []
+        for colorless_throw in set(colorless_throws):
+            for color in Color:
+                if color in self.crossed:
+                    continue
+                actions_phase_2.append(Action(color, colorless_throw + colored_throws[color]))
+
+        # Reconstruct main_actions and side_actions
+        main_actions = [[action] for action in actions_phase_2]
+        for action_1 in actions_phase_1:
+            for action_2 in actions_phase_2:
+                main_actions.append([action_1, action_2])
+            main_actions.append([action_1])
+        main_actions.append([])
+
+        side_actions = [[action] for action in actions_phase_1]
+        side_actions.append([])
+
+        scoreboard = self.scoreboards[player_index]
+
+        if is_main:
+            possible_actions = [actions for actions in main_actions if self.filter(actions, scoreboard)]
+        else:
+            possible_actions = [actions for actions in side_actions if self.filter(actions, scoreboard)]
+
+        return possible_actions
+    
+
+    def apply_action(self, player_index, actions):
+        scoreboard = self.scoreboards[player_index]
+
+        if len(actions) == 0:
+            if player_index == self.turn:
+                # Main player crosses if no action is taken
+                scoreboard.crosses += 1
+        else:
+            for action in actions:
+                scoreboard.move(action)
+
+        # Update crossed colors if necessary
+        self.update_crossed()
+
+        # Advance the turn only if it's the main player's move
+        if player_index == self.turn:
+            self.turn = (self.turn + 1) % self.n_players
+
+
     def move(self):
         colorless_throws = [dice_throw(), dice_throw()]
         colored_throws = {color: dice_throw() for color in Color}
